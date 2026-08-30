@@ -490,6 +490,7 @@ class ComputeHost:
                 session,
                 text,
                 display_kind=frame.get("display_kind") or None,
+                execution_mode=frame.get("execution_mode") or "normal",
             )
             run_thread = session.get("_run_thread")
             if run_thread is not None and hasattr(run_thread, "join"):

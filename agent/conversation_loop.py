@@ -2018,6 +2018,15 @@ def run_conversation(
     # See agent/transports/codex_app_server_session.py for the adapter
     # and references/codex-app-server-runtime.md for the rationale.
     if agent.api_mode == "codex_app_server":
+        from agent.execution_mode import plan_mode_runtime_block_message
+
+        runtime_block = plan_mode_runtime_block_message(
+            getattr(agent, "_current_execution_mode", "normal"),
+            agent.api_mode,
+        )
+        if runtime_block is not None:
+            raise RuntimeError(runtime_block)
+
         return agent._run_codex_app_server_turn(
             user_message=user_message,
             original_user_message=original_user_message,

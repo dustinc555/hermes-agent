@@ -270,7 +270,11 @@ export async function runRewindSubmit(
   truncateOrdinal: number | undefined,
   truncateMessageId: string | undefined,
   interruptFirst: boolean,
-  recovery?: { storedSessionId?: null | string; onSessionRecovered?: (sessionId: string) => void },
+  recovery?: {
+    executionMode?: 'normal' | 'plan'
+    storedSessionId?: null | string
+    onSessionRecovered?: (sessionId: string) => void
+  },
   truncateRowId?: number,
   sourceText?: string,
   rebindRowIds?: readonly number[]
@@ -338,6 +342,7 @@ export async function runRewindSubmit(
       {
         session_id: targetId,
         text,
+        ...(recovery?.executionMode === 'plan' && { execution_mode: 'plan' }),
         ...truncateSubmitParams(resolvedOrdinal, resolvedMessageId, resolvedRowId),
         // A first-turn rewind resolves to an empty transcript, which the
         // gateway additionally gates behind confirm_empty_truncate. In

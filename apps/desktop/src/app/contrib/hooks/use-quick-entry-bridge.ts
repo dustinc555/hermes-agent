@@ -1,24 +1,61 @@
 import { useEffect, useRef } from 'react'
 
 import {
+  executionModeDraftKey,
+  executionModeOwnerProfile,
+  executionModeSessionKey,
+  getExecutionMode
+} from '@/store/execution-mode'
+import {
   initQuickEntryBridge,
   QUICK_TARGET_CURRENT,
   QUICK_TARGET_NEW,
   type QuickEntrySessionOption,
   setQuickEntrySubmitHandler
 } from '@/store/quick-entry'
-import { $gatewayState, $sessions } from '@/store/session'
-import { sessionTileDelegate } from '@/store/session-states'
+import {
+  $gatewayState,
+  $sessions,
+  knownSessionOwner,
+  resolveComposerSessionKey
+} from '@/store/session'
+import { sessionTileDelegate, sessionTileOwnerRoute } from '@/store/session-states'
 import { isAuxiliaryWindow } from '@/store/windows'
 
+import type { SubmitTextOptions } from '../../session/hooks/use-prompt-actions/utils'
+
 interface QuickEntryBridgeParams {
+  activeGatewayProfile: string
+  selectedStoredSessionId: string | null
   startFreshSessionDraft: () => void
-  submitText: (text: string) => Promise<unknown> | unknown
+  submitText: (text: string, options?: SubmitTextOptions) => Promise<unknown> | unknown
 }
 
 // The picker is a capture aid, not a session browser — a handful of recent
 // rows is the whole point.
 const QUICK_ENTRY_SESSION_OPTIONS = 5
+
+export function quickEntryExecutionModeSnapshot(
+  storedSessionId: string | null,
+  activeGatewayProfile: string
+): Pick<SubmitTextOptions, 'executionMode' | 'executionModeKey'> {
+  const rows = $sessions.get()
+
+  const executionModeKey = storedSessionId
+    ? executionModeSessionKey(
+        executionModeOwnerProfile(
+          sessionTileOwnerRoute(storedSessionId) ??
+            knownSessionOwner(rows, storedSessionId)
+        ),
+        resolveComposerSessionKey(storedSessionId, rows) || storedSessionId
+      )
+    : executionModeDraftKey(activeGatewayProfile || 'default', 'main')
+
+  return {
+    executionMode: getExecutionMode(executionModeKey),
+    executionModeKey
+  }
+}
 
 function sessionOptions(): QuickEntrySessionOption[] {
   return $sessions
@@ -50,11 +87,20 @@ function sessionOptions(): QuickEntrySessionOption[] {
  * secondary session window must not also claim the global capture channel, or
  * one keystroke would send N prompts.
  */
-export function useQuickEntryBridge({ startFreshSessionDraft, submitText }: QuickEntryBridgeParams): void {
+export function useQuickEntryBridge({
+  activeGatewayProfile,
+  selectedStoredSessionId,
+  startFreshSessionDraft,
+  submitText
+}: QuickEntryBridgeParams): void {
   const submitTextRef = useRef(submitText)
   submitTextRef.current = submitText
   const startFreshRef = useRef(startFreshSessionDraft)
   startFreshRef.current = startFreshSessionDraft
+  const activeProfileRef = useRef(activeGatewayProfile)
+  activeProfileRef.current = activeGatewayProfile
+  const selectedStoredSessionIdRef = useRef(selectedStoredSessionId)
+  selectedStoredSessionIdRef.current = selectedStoredSessionId
 
   useEffect(() => {
     if (isAuxiliaryWindow()) {
@@ -66,7 +112,13 @@ export function useQuickEntryBridge({ startFreshSessionDraft, submitText }: Quic
         // Same as the user clicking New Chat and typing: fresh draft, then the
         // normal submit creates the backend session.
         startFreshRef.current()
-        void submitTextRef.current(text)
+        void submitTextRef.current(text, {
+          executionMode: 'normal',
+          executionModeKey: executionModeDraftKey(
+            activeProfileRef.current || 'default',
+            'main'
+          )
+        })
 
         return
       }
@@ -76,18 +128,29 @@ export function useQuickEntryBridge({ startFreshSessionDraft, submitText }: Quic
         // the session-tile delegate so the primary view stays where it is.
         const delegate = sessionTileDelegate()
 
+        const snapshot = quickEntryExecutionModeSnapshot(
+          target,
+          activeProfileRef.current
+        )
+
         if (delegate) {
           void delegate
             .resumeTile(target)
-            .then(runtimeId => delegate.submitToSession(runtimeId, text))
+            .then(runtimeId => delegate.submitToSession(runtimeId, text, snapshot))
             // A dead/undeliverable target must not swallow the prompt.
-            .catch(() => void submitTextRef.current(text))
+            .catch(() => void submitTextRef.current(text, snapshot))
 
           return
         }
       }
 
-      void submitTextRef.current(text)
+      void submitTextRef.current(
+        text,
+        quickEntryExecutionModeSnapshot(
+          selectedStoredSessionIdRef.current,
+          activeProfileRef.current
+        )
+      )
     })
 
     const dispose = initQuickEntryBridge()

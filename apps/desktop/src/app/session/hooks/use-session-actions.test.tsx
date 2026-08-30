@@ -22,6 +22,11 @@ import {
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { $clarifyRequests, clearClarifyRequest, setClarifyRequest } from '@/store/clarify'
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
+import {
+  executionModeDraftKey,
+  getExecutionMode,
+  setExecutionMode
+} from '@/store/execution-mode'
 import { requestGatewayForAgent, requestGatewayForProfile } from '@/store/gateway'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $activeGatewayProfile, $newChatProfile, $newChatRoute, $profiles, ensureGatewayProfile } from '@/store/profile'
@@ -528,6 +533,22 @@ describe('startFreshSessionDraft', () => {
     expect(navigate).not.toHaveBeenCalled()
     expect($currentCwd.get()).toBe('')
     expect($newChatWorkspaceTarget.get()).toBeNull()
+  })
+
+  it('starts a new chat in Normal instead of inheriting an abandoned Plan draft', async () => {
+    const navigate = vi.fn()
+    const requestGateway = vi.fn(async () => ({}) as never)
+    let handle: HarnessHandle | null = null
+    const key = executionModeDraftKey('default', 'main')
+
+    $activeGatewayProfile.set('default')
+    setExecutionMode(key, 'plan')
+    render(<Harness navigate={navigate} onReady={value => (handle = value)} requestGateway={requestGateway} />)
+    await waitFor(() => expect(handle).not.toBeNull())
+
+    act(() => handle!.startFreshSessionDraft())
+
+    expect(getExecutionMode(key)).toBe('normal')
   })
 
   it('fronts the workspace without closing a terminal that is merely behind a tab', async () => {

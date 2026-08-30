@@ -1998,6 +1998,7 @@ export interface Translations {
     placeholderStarting: string
     placeholderReconnecting: string
     placeholderFollowUp: string
+    placeholderPlan: string
     newSessionPlaceholders: readonly string[]
     followUpPlaceholders: readonly string[]
     startVoice: string

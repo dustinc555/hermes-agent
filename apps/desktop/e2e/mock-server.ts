@@ -494,6 +494,93 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           const isCorrectionSwitchTrigger = messages.some(
             message => typeof message?.content === 'string' && message.content.includes(CORRECTION_SWITCH_TRIGGER),
           )
+          const planWriteMatch = userText.match(/E2E_PLAN_MODE_WRITE_TRIGGER\s+(\S+)/)
+          const priorPlanWriteMatch = [...messages]
+            .reverse()
+            .map(message =>
+              typeof message?.content === 'string'
+                ? message.content.match(/E2E_PLAN_MODE_WRITE_TRIGGER\s+(\S+)/)
+                : null,
+            )
+            .find((match): match is RegExpMatchArray => match !== null)
+          const isPlanWriteFollowup = /(?:^|\n\n)do it\s*$/i.test(userText)
+          const latestExecutionMode = [...messages]
+            .reverse()
+            .map(message => {
+              if (typeof message?.content !== 'string') {
+                return null
+              }
+              if (message.content.includes('[EXECUTION MODE — NORMAL]')) {
+                return 'normal' as const
+              }
+              if (message.content.includes('[PLAN MODE — READ ONLY]')) {
+                return 'plan' as const
+              }
+              return null
+            })
+            .find((mode): mode is 'normal' | 'plan' => mode !== null)
+
+          if (planWriteMatch || (isPlanWriteFollowup && priorPlanWriteMatch)) {
+            const writePath = nodePath.normalize((planWriteMatch ?? priorPlanWriteMatch)![1])
+            const safePrefix = nodePath.join(os.tmpdir(), 'hermes-e2e-')
+            const safeWritePath = nodePath.isAbsolute(writePath) && writePath.startsWith(safePrefix)
+            let lastUserIndex = -1
+            for (let index = messages.length - 1; index >= 0; index--) {
+              if (messages[index]?.role === 'user') {
+                lastUserIndex = index
+                break
+              }
+            }
+            const toolResultsAfterLastUser = messages
+              .slice(lastUserIndex + 1)
+              .filter(message => message?.role === 'tool')
+            const toolOutputAfterLastUser = toolResultsAfterLastUser
+              .map(message => typeof message?.content === 'string' ? message.content : JSON.stringify(message?.content))
+              .join('\n')
+            const blockedPlanToolCount = toolResultsAfterLastUser.filter(message => {
+              const content = typeof message?.content === 'string'
+                ? message.content
+                : JSON.stringify(message?.content)
+
+              return /Plan Mode is read-only/.test(content)
+            }).length
+            const turn: ScriptedTurn = !safeWritePath
+              ? { text: 'Rejected unsafe Plan write path.' }
+              : isPlanWriteFollowup && latestExecutionMode !== 'normal'
+                ? { text: 'Still blocked by Plan Mode.' }
+              : toolResultsAfterLastUser.length >= 2
+                ? {
+                    text: isPlanWriteFollowup && /hello world/i.test(toolOutputAfterLastUser)
+                      ? 'Normal follow-up executed: hello world'
+                      : isPlanWriteFollowup
+                        ? 'Normal follow-up execution failed.'
+                        : blockedPlanToolCount === 2
+                          ? 'Plan write and terminal attempts blocked.'
+                          : 'Plan guard failure.',
+                  }
+                : toolResultsAfterLastUser.length === 1
+                  ? {
+                      text: '',
+                      toolCalls: [{
+                        name: 'terminal',
+                        args: { command: `python3 ${JSON.stringify(writePath)}` },
+                      }],
+                    }
+                : {
+                    text: '',
+                    toolCalls: [{
+                      name: 'write_file',
+                      args: { path: writePath, content: "print('hello world')\n" },
+                    }],
+                  }
+
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
 
           if (isTaskPanelResumeTrigger) {
             const turn =

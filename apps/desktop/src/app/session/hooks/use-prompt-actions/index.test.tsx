@@ -9,6 +9,7 @@ import { textPart } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { $composerAttachments, $composerDraft, type ComposerAttachment, setComposerDraft } from '@/store/composer'
 import { $queuedPromptsBySession, getQueuedPrompts } from '@/store/composer-queue'
+import { setExecutionMode } from '@/store/execution-mode'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
 import { $hudMode } from '@/store/hud'
@@ -367,10 +368,11 @@ describe('usePromptActions HUD surface', () => {
   afterEach(() => {
     cleanup()
     $hudMode.set(false)
+    setExecutionMode(`default:session:${RUNTIME_SESSION_ID}`, 'normal')
     vi.restoreAllMocks()
   })
 
-  async function submitFrom(window: 'app' | 'hud') {
+  async function submitFrom(window: 'app' | 'hud', executionMode?: 'normal' | 'plan') {
     $hudMode.set(window === 'hud')
 
     const submitted: (Record<string, unknown> | undefined)[] = []
@@ -388,7 +390,10 @@ describe('usePromptActions HUD surface', () => {
       <Harness onReady={h => (handle = h)} refreshSessions={async () => undefined} requestGateway={requestGateway} />
     )
 
-    await handle!.submitText("what's under you rn?")
+    await handle!.submitText(
+      "what's under you rn?",
+      executionMode ? { executionMode } : undefined
+    )
 
     return submitted[0]
   }
@@ -399,6 +404,16 @@ describe('usePromptActions HUD surface', () => {
 
   it('says nothing about the surface from the app window', async () => {
     expect(await submitFrom('app')).not.toHaveProperty('surface')
+  })
+
+  it('carries the exact Plan snapshot on prompt.submit', async () => {
+    expect(await submitFrom('app', 'plan')).toMatchObject({ execution_mode: 'plan' })
+  })
+
+  it('uses the stored chat mode when an external submit omits an explicit snapshot', async () => {
+    setExecutionMode(`default:session:${RUNTIME_SESSION_ID}`, 'plan')
+
+    expect(await submitFrom('app')).toMatchObject({ execution_mode: 'plan' })
   })
 })
 
@@ -2325,7 +2340,8 @@ describe('usePromptActions redirectPrompt', () => {
     expect(accepted).toBe(true)
     expect(requestGateway).toHaveBeenCalledWith('session.redirect', {
       session_id: RUNTIME_SESSION_ID,
-      text: 'nudge the run'
+      text: 'nudge the run',
+      execution_mode: 'normal'
     })
     expect(requestGateway).not.toHaveBeenCalledWith('prompt.submit', expect.anything())
     expect((capturedStates.at(-1)?.messages as unknown[]).at(-1)).toMatchObject({
@@ -2465,7 +2481,8 @@ describe('usePromptActions redirectPrompt', () => {
     expect(await handle!.redirectPrompt('build-window nudge')).toBe(true)
     expect(requestGateway).toHaveBeenCalledWith('session.redirect', {
       session_id: RUNTIME_SESSION_ID,
-      text: 'build-window nudge'
+      text: 'build-window nudge',
+      execution_mode: 'normal'
     })
     expect(requestGateway).not.toHaveBeenCalledWith('prompt.submit', expect.anything())
     expect((capturedStates.at(-1)?.messages as unknown[]).at(-1)).toMatchObject({
@@ -2513,9 +2530,17 @@ describe('usePromptActions redirectPrompt', () => {
 
     expect(await handle!.redirectPrompt('reconnect nudge')).toBe(true)
     expect(calls.map(c => c.method)).toEqual(['session.redirect', 'session.resume', 'session.redirect'])
-    expect(calls[0]?.params).toEqual({ session_id: RUNTIME_SESSION_ID, text: 'reconnect nudge' })
+    expect(calls[0]?.params).toEqual({
+      session_id: RUNTIME_SESSION_ID,
+      text: 'reconnect nudge',
+      execution_mode: 'normal'
+    })
     expect(calls[1]?.params).toEqual({ session_id: STORED_SESSION_ID, source: 'desktop', omit_messages: true })
-    expect(calls[2]?.params).toEqual({ session_id: RECOVERED_SESSION_ID, text: 'reconnect nudge' })
+    expect(calls[2]?.params).toEqual({
+      session_id: RECOVERED_SESSION_ID,
+      text: 'reconnect nudge',
+      execution_mode: 'normal'
+    })
     expect(handle!.activeSessionIdRef.current).toBe(RECOVERED_SESSION_ID)
   })
 })
@@ -5455,7 +5480,8 @@ describe('usePromptActions stale-closure session routing', () => {
     // this is the observed "session suddenly working on another chat's task".
     expect(requestGateway).toHaveBeenCalledWith('session.redirect', {
       session_id: RUNTIME_SESSION_B,
-      text: 'actually use Postgres'
+      text: 'actually use Postgres',
+      execution_mode: 'normal'
     })
     expect(requestGateway).not.toHaveBeenCalledWith(
       'session.redirect',

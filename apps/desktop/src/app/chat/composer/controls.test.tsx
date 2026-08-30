@@ -35,6 +35,7 @@ function renderControls(overrides: Partial<React.ComponentProps<typeof ComposerC
           status: 'idle'
         }}
         disabled={false}
+        executionMode="normal"
         hasComposerPayload={true}
         onDictate={vi.fn()}
         onQueue={vi.fn()}
@@ -154,6 +155,28 @@ describe('ComposerControls shortcut tooltips', () => {
     renderControls({ busy: true, busyAction: 'queue' })
 
     await expectShortcutTooltip('Queue message', 'Ctrl+↵')
+  })
+})
+
+describe('Plan Mode treatment', () => {
+  it('does not show a mode indicator in Normal Mode', () => {
+    renderControls()
+
+    expect(screen.queryByRole('status', { name: 'Plan Mode on' })).toBeNull()
+  })
+
+  it('shows the unboxed PLAN indicator in the controls row', () => {
+    renderControls({ executionMode: 'plan' })
+
+    const indicator = screen.getByRole('status', { name: 'Plan Mode on' })
+    expect(indicator.textContent).toBe('PLAN')
+    expect(indicator.getAttribute('data-slot')).toBe('plan-mode-indicator')
+  })
+
+  it('turns the primary composer action purple in Plan Mode', () => {
+    renderControls({ executionMode: 'plan' })
+
+    expect(screen.getByLabelText('Send').getAttribute('data-execution-mode')).toBe('plan')
   })
 })
 

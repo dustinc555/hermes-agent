@@ -95,6 +95,29 @@ describe('useBackgroundQueueDrain', () => {
     await waitFor(() => expect(getQueuedPrompts('stored-session-a')).toHaveLength(0))
   })
 
+  it('preserves a queued Plan snapshot while draining off-screen', async () => {
+    const runtimeMap = { current: new Map([['stored-session-a', 'rt-session-a']]) }
+    const submitText = vi.fn(async () => true)
+
+    enqueueQueuedPrompt('stored-session-a', {
+      text: 'discuss in the background',
+      attachments: [],
+      executionMode: 'plan'
+    })
+
+    render(<Harness runtimeMap={runtimeMap} submitText={submitText} />)
+
+    await waitFor(() => {
+      expect(submitText).toHaveBeenCalledWith('discuss in the background', {
+        attachments: [],
+        executionMode: 'plan',
+        fromQueue: true,
+        sessionId: 'rt-session-a',
+        storedSessionId: 'stored-session-a'
+      })
+    })
+  })
+
   it('leaves the selected session queue to the mounted ChatBar drainer', async () => {
     const runtimeMap = { current: new Map([['stored-session-a', 'rt-session-a']]) }
     const submitText = vi.fn(async () => true)

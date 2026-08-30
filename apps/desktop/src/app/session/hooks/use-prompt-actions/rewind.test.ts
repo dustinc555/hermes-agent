@@ -470,6 +470,24 @@ describe('runRewindSubmit durable-address discipline (#87059)', () => {
       return { status: 'streaming' }
     }) as <T>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>
 
+  it('carries the exact Plan snapshot on rewind/edit/regenerate submits', async () => {
+    const calls: Call[] = []
+
+    await runRewindSubmit(
+      makeGateway(calls),
+      'sid',
+      'fixed prompt',
+      undefined,
+      undefined,
+      false,
+      { executionMode: 'plan' }
+    )
+
+    expect(calls.find(call => call.method === 'prompt.submit')?.params).toMatchObject({
+      execution_mode: 'plan'
+    })
+  })
+
   it('resolves a missing rowId by content before submitting, and drops the client ordinal', async () => {
     const calls: Call[] = []
 

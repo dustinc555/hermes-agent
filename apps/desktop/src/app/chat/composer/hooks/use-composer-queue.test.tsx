@@ -37,6 +37,7 @@ function renderQueueHook(overrides: { busy?: boolean; onCancel?: () => void; onS
         busy,
         clearDraft: () => undefined,
         draftRef: { current: '' },
+        executionMode: 'normal',
         focusInput: () => undefined,
         loadIntoComposer: () => undefined,
         onCancel,
@@ -73,6 +74,19 @@ describe('useComposerQueue park integration', () => {
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     expect(getQueuedPrompts(SESSION_KEY)).toHaveLength(0)
+  })
+
+  it('drains with the execution mode captured when the prompt was queued', async () => {
+    enqueueQueuedPrompt(SESSION_KEY, {
+      attachments: [],
+      executionMode: 'plan',
+      text: 'discuss later'
+    })
+
+    const { onSubmit } = renderQueueHook()
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0]?.[1]).toMatchObject({ executionMode: 'plan' })
   })
 
   it('holds a parked queue at the idle settle (the Stop edge)', async () => {
@@ -139,11 +153,33 @@ describe('useComposerQueue park integration', () => {
       expect(await hook.result.current.steerQueuedNow(entry!.id)).toBe(true)
     })
 
-    expect(onSteer).toHaveBeenCalledWith('steer me')
+    expect(onSteer).toHaveBeenCalledWith('steer me', { executionMode: 'normal' })
     // A redirect rides the live turn: no interrupt, no submit.
     expect(onCancel).not.toHaveBeenCalled()
     expect(onSubmit).not.toHaveBeenCalled()
     expect(getQueuedPrompts(SESSION_KEY)).toHaveLength(0)
+  })
+
+  it('does not steer a queued Plan turn into a running Normal turn', async () => {
+    const entry = enqueueQueuedPrompt(SESSION_KEY, {
+      attachments: [],
+      executionMode: 'plan',
+      text: 'keep this read only'
+    })
+    const onSteer = vi.fn(async () => true)
+    const { hook, onCancel, onSubmit } = renderQueueHook({ busy: true, onSteer })
+
+    await act(async () => {
+      expect(await hook.result.current.steerQueuedNow(entry!.id)).toBe(true)
+    })
+
+    expect(onSteer).not.toHaveBeenCalled()
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(getQueuedPrompts(SESSION_KEY)).toHaveLength(1)
+
+    hook.rerender({ busy: false })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0]?.[1]).toMatchObject({ executionMode: 'plan' })
   })
 
   it('a rejected steer leaves the entry queued so the settle drain still sends it', async () => {

@@ -1940,6 +1940,7 @@ export const zhHant = defineLocale({
     placeholderStarting: '正在啟動 Hermes...',
     placeholderReconnecting: '正在重新連線至 Hermes…',
     placeholderFollowUp: '傳送後續訊息',
+    placeholderPlan: '描述您想規劃的內容…',
     newSessionPlaceholders: [
       '我們要建立什麼？',
       '給 Hermes 一個任務',

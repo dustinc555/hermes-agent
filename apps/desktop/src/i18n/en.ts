@@ -2334,6 +2334,7 @@ export const en: Translations = {
     placeholderStarting: 'Starting Hermes...',
     placeholderReconnecting: 'Reconnecting to Hermes…',
     placeholderFollowUp: 'Send follow-up',
+    placeholderPlan: 'Describe what you want planned…',
     newSessionPlaceholders: [
       'What are we building?',
       'Give Hermes a task',

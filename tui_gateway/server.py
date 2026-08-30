@@ -2614,6 +2614,7 @@ def _compute_host_turn_frame(
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
     display_kind: str | None = None,
+    execution_mode: str = "normal",
 ) -> dict:
     with session["history_lock"]:
         history = list(session.get("history", []))
@@ -2629,6 +2630,7 @@ def _compute_host_turn_frame(
         "request_id": rid,
         "session_key": session.get("session_key") or sid,
         "text": text,
+        "execution_mode": execution_mode,
         **({"display_kind": display_kind} if display_kind else {}),
         "history": history,
         "history_version": history_version,
@@ -2719,6 +2721,7 @@ def _submit_prompt_to_compute_host(
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
     display_kind: str | None = None,
+    execution_mode: str = "normal",
 ) -> dict:
     cfg = _load_dashboard_process_isolation_config()
     frame = _compute_host_turn_frame(
@@ -2729,6 +2732,7 @@ def _submit_prompt_to_compute_host(
         image_paths=image_paths,
         queued_prompt_generation=queued_prompt_generation,
         display_kind=display_kind,
+        execution_mode=execution_mode,
     )
 
     def _complete(done: dict) -> None:
@@ -9687,7 +9691,14 @@ def _maybe_schedule_auto_continue(sid: str, session: dict, session_key: str) -> 
                 {"kind": "process", "text": "Resuming interrupted turn…"},
             )
             _emit("message.start", sid)
-            _run_prompt_submit(rid, sid, session, text, display_kind="auto_continue")
+            _run_prompt_submit(
+                rid,
+                sid,
+                session,
+                text,
+                display_kind="auto_continue",
+                execution_mode=marker["execution_mode"],
+            )
         except Exception as exc:
             print(
                 f"[tui_gateway] auto-continue dispatch failed: "
@@ -9712,6 +9723,7 @@ def _enqueue_prompt(
     text: Any,
     transport: Any,
     image_paths: list[str] | None = None,
+    execution_mode: str = "normal",
 ) -> None:
     """Stash a message to run as the very next turn once the live one ends.
 
@@ -9738,6 +9750,8 @@ def _enqueue_prompt(
         if original and text.strip() == original:
             return
     queued = {"text": text, "transport": transport}
+    if execution_mode == "plan":
+        queued["execution_mode"] = "plan"
     if image_paths:
         queued["image_paths"] = image_paths
     existing = session.get("queued_prompt")
@@ -9747,6 +9761,7 @@ def _enqueue_prompt(
         and isinstance(text, str)
         and not existing.get("image_paths")
         and not image_paths
+        and existing.get("execution_mode", "normal") == execution_mode
         and not session.get("queued_prompts")
     ):
         prev = existing["text"]
@@ -9870,7 +9885,13 @@ def _interrupt_busy_session(sid: str, session: dict, agent: Any) -> None:
 
 
 def _handle_busy_submit(
-    rid, sid: str, session: dict, text: Any, transport: Any, queued: bool = False
+    rid,
+    sid: str,
+    session: dict,
+    text: Any,
+    transport: Any,
+    queued: bool = False,
+    execution_mode: str = "normal",
 ) -> dict | None:
     """Apply the ``display.busy_input_mode`` policy to a prompt that lands while
     a turn is in flight, instead of rejecting it with ``session busy``.
@@ -9893,6 +9914,15 @@ def _handle_busy_submit(
     """
     mode = "queue" if queued else _load_busy_input_mode()
     agent = session.get("agent")
+    from agent.execution_mode import normalize_execution_mode
+
+    current_execution_mode = normalize_execution_mode(
+        getattr(agent, "_current_execution_mode", "normal")
+    )
+    submitted_execution_mode = normalize_execution_mode(execution_mode)
+    if submitted_execution_mode != current_execution_mode:
+        mode = "queue"
+
     with session["history_lock"]:
         if not session.get("running"):
             # The turn ended between prompt.submit's first busy check and this
@@ -9948,7 +9978,13 @@ def _handle_busy_submit(
             if image_paths:
                 session["attached_images"] = image_paths + list(session.get("attached_images", []))
             return None
-        _enqueue_prompt(session, text, transport, image_paths=image_paths)
+        _enqueue_prompt(
+            session,
+            text,
+            transport,
+            image_paths=image_paths,
+            execution_mode=execution_mode,
+        )
         session["last_active"] = time.time()
 
     # Attachments need a separate model invocation. Queue them without
@@ -10009,6 +10045,11 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
             session["running"] = False
             return True
     dispatch_failed = False
+    execution_mode_kwargs: dict[str, Any] = (
+        {"execution_mode": "plan"}
+        if queued.get("execution_mode") == "plan"
+        else {}
+    )
     try:
         if use_compute_host:
             if queued.get("image_paths"):
@@ -10019,10 +10060,16 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
                     queued["text"],
                     image_paths=queued["image_paths"],
                     queued_prompt_generation=queue_generation,
+                    **execution_mode_kwargs,
                 )
             else:
                 resp = _submit_prompt_to_compute_host(
-                    rid, sid, session, queued["text"], queued_prompt_generation=queue_generation
+                    rid,
+                    sid,
+                    session,
+                    queued["text"],
+                    queued_prompt_generation=queue_generation,
+                    **execution_mode_kwargs,
                 )
             if resp.get("error"):
                 message = str(((resp.get("error") or {}).get("message")) or "queued prompt failed")
@@ -10040,6 +10087,7 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
                     queued["text"],
                     image_paths=queued["image_paths"],
                     queued_prompt_generation=queue_generation,
+                    **execution_mode_kwargs,
                 )
             else:
                 _run_prompt_submit(
@@ -10048,6 +10096,7 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
                     session,
                     queued["text"],
                     queued_prompt_generation=queue_generation,
+                    **execution_mode_kwargs,
                 )
     except Exception as exc:
         print(
@@ -12406,7 +12455,11 @@ def _run_prompt_submit(
     display_metadata: dict | None = None,
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
+    execution_mode: str = "normal",
 ) -> bool:
+    from agent.execution_mode import normalize_execution_mode
+
+    execution_mode = normalize_execution_mode(execution_mode)
     with session["history_lock"]:
         if session.get("_closing"):
             session["running"] = False
@@ -12488,7 +12541,13 @@ def _run_prompt_submit(
         marker_attempt = int(session.pop("_auto_continue_attempt", 0) or 0)
         marker_text = session.pop("_auto_continue_prompt", None) or text
         if isinstance(marker_text, str) and marker_text.strip():
-            record_turn_start(marker_home, marker_key, marker_text, attempts=marker_attempt)
+            record_turn_start(
+                marker_home,
+                marker_key,
+                marker_text,
+                attempts=marker_attempt,
+                execution_mode=execution_mode,
+            )
         try:
             from tools.approval import (
                 reset_current_session_key,
@@ -12691,6 +12750,18 @@ def _run_prompt_submit(
             # state, so it cannot live in the (byte-stable) system prompt.
             run_message = _prepend_note(run_message, _hud_surface_note(session))
 
+            # Every turn carries an explicit mode note. A Plan note is retained
+            # in that historical turn's API replay for prompt-cache stability;
+            # therefore omission on a later Normal turn is ambiguous and can
+            # make the model keep obeying the old Plan restriction. The newest
+            # note is authoritative and states that older notes are historical.
+            from agent.execution_mode import execution_mode_turn_note
+
+            run_message = _prepend_note(
+                run_message,
+                execution_mode_turn_note(execution_mode),
+            )
+
             def _stream(delta):
                 with session["history_lock"]:
                     _append_inflight_delta(session, delta)
@@ -12734,8 +12805,14 @@ def _run_prompt_submit(
                 _run_params = inspect.signature(agent.run_conversation).parameters
             except (TypeError, ValueError):
                 _run_params = {}
+            _run_accepts_kwargs = any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in _run_params.values()
+            )
             if "task_id" in _run_params:
                 run_kwargs["task_id"] = session["session_key"]
+            if "execution_mode" in _run_params or _run_accepts_kwargs:
+                run_kwargs["execution_mode"] = execution_mode
             if display_kind and "persist_user_display_kind" in _run_params:
                 run_kwargs["persist_user_display_kind"] = display_kind
                 run_kwargs["persist_user_display_metadata"] = display_metadata

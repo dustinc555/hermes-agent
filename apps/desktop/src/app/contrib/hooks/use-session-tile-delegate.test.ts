@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as HermesModule from '@/hermes'
+import { executionModeSessionKey, setExecutionMode } from '@/store/execution-mode'
 import { setSessionOwnerHint, setSessions } from '@/store/session'
 import { sessionTileDelegate } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
@@ -102,6 +103,40 @@ describe('useSessionTileDelegate resumeTile', () => {
       undefined
     )
     expect(requestGateway).not.toHaveBeenCalled()
+  })
+
+  it('submits Quick Entry with the target chat Plan snapshot', async () => {
+    setSessions([row({ id: 'stored-plan', profile: 'default' })])
+    setExecutionMode(executionModeSessionKey('default', 'stored-plan'), 'normal')
+    const runtimeIdByStoredSessionIdRef = {
+      current: new Map([['stored-plan', 'runtime-plan']])
+    }
+    const sessionStateByRuntimeIdRef = {
+      current: new Map([
+        ['runtime-plan', { busy: false, messages: [], storedSessionId: 'stored-plan' }]
+      ])
+    }
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    renderTile(requestGateway, {
+      runtimeIdByStoredSessionIdRef,
+      sessionStateByRuntimeIdRef
+    })
+    await sessionTileDelegate()!.submitToSession('runtime-plan', 'discuss only', {
+      executionMode: 'plan'
+    })
+
+    expect(requestGatewayForProfile).toHaveBeenCalledWith(
+      'default',
+      'prompt.submit',
+      {
+        session_id: 'runtime-plan',
+        text: 'discuss only',
+        execution_mode: 'plan'
+      },
+      expect.any(Number),
+      undefined
+    )
   })
 
   it('resolves and carries a default-profile session explicitly', async () => {

@@ -19,10 +19,21 @@ import { triggerHaptic } from '@/lib/haptics'
 import { clearClarifyRequest } from '@/store/clarify'
 import type { ComposerAttachment } from '@/store/composer'
 import { resetSessionBackground } from '@/store/composer-status'
+import {
+  executionModeOwnerProfile,
+  executionModeSessionKey,
+  getExecutionMode
+} from '@/store/execution-mode'
 import { notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
-import { $sessions, knownSessionOwner, ownerLookupSessionRows, sessionMatchesStoredId } from '@/store/session'
+import {
+  $sessions,
+  knownSessionOwner,
+  ownerLookupSessionRows,
+  resolveComposerSessionKey,
+  sessionMatchesStoredId
+} from '@/store/session'
 import {
   requestForSessionProfile,
   type SessionOwnerScope,
@@ -364,7 +375,10 @@ export function useSessionTileActions({ requestGateway, runtimeId, scope, stored
   }, [bindRecoveredRuntime, copy.stopFailed, requestSessionGateway, update])
 
   const steerPrompt = useCallback(
-    async (rawText: string): Promise<boolean> => {
+    async (
+      rawText: string,
+      options?: Pick<SubmitTextOptions, 'executionMode'>
+    ): Promise<boolean> => {
       const text = rawText.trim()
       const sessionId = runtimeIdRef.current
 
@@ -411,7 +425,12 @@ export function useSessionTileActions({ requestGateway, runtimeId, scope, stored
         const { result } = await withSessionNotFoundResume(
           sessionId,
           storedIdRef.current,
-          liveId => requestSessionGateway<{ status?: string }>('session.redirect', { session_id: liveId, text }),
+          liveId =>
+            requestSessionGateway<{ status?: string }>('session.redirect', {
+              session_id: liveId,
+              text,
+              execution_mode: options?.executionMode ?? 'normal'
+            }),
           {
             requestGateway: requestSessionGateway,
             onRecovered: bindRecoveredRuntime
@@ -465,6 +484,18 @@ export function useSessionTileActions({ requestGateway, runtimeId, scope, stored
         interruptFirst,
         {
           storedSessionId: storedIdRef.current,
+          executionMode: storedIdRef.current
+            ? getExecutionMode(
+                executionModeSessionKey(
+                  executionModeOwnerProfile(
+                    sessionTileOwnerRoute(storedIdRef.current) ??
+                      knownSessionOwner($sessions.get(), storedIdRef.current)
+                  ),
+                  resolveComposerSessionKey(storedIdRef.current, $sessions.get()) ||
+                    storedIdRef.current
+                )
+              )
+            : 'normal',
           onSessionRecovered: bindRecoveredRuntime
         },
         truncateRowId,

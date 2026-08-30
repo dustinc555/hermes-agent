@@ -12,6 +12,7 @@ export interface QueuedPromptEntry {
    *  expanded skill body as `text` — the UI shows the invocation instead. */
   displayText?: string
   attachments: ComposerAttachment[]
+  executionMode?: 'normal' | 'plan'
   queuedAt: number
 }
 
@@ -125,7 +126,12 @@ export const getQueuedPrompts = (key: string | null | undefined): QueuedPromptEn
 
 export const enqueueQueuedPrompt = (
   key: string | null | undefined,
-  payload: { text: string; attachments: ComposerAttachment[]; displayText?: string }
+  payload: {
+    text: string
+    attachments: ComposerAttachment[]
+    displayText?: string
+    executionMode?: 'normal' | 'plan'
+  }
 ): null | QueuedPromptEntry => {
   const sid = sidOf(key)
 
@@ -137,6 +143,7 @@ export const enqueueQueuedPrompt = (
     id: nextId(),
     text: payload.text,
     ...(payload.displayText ? { displayText: payload.displayText } : {}),
+    ...(payload.executionMode === 'plan' ? { executionMode: 'plan' as const } : {}),
     attachments: cloneAttachments(payload.attachments),
     queuedAt: Date.now()
   }

@@ -671,7 +671,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // The global-hotkey Quick Entry window's bridge: its captured text rides the
   // SAME submit machinery the normal composer uses (current chat / picked
   // session / new session), and it hears gateway truth from this window.
-  useQuickEntryBridge({ startFreshSessionDraft, submitText })
+  useQuickEntryBridge({
+    activeGatewayProfile,
+    selectedStoredSessionId,
+    startFreshSessionDraft,
+    submitText
+  })
 
   // Leaving HUD mode hands this window the session back (see hud/handoff).
   useHudHandoff({ navigate, resumeSession })

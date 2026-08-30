@@ -28,6 +28,7 @@ interface UseComposerSubmitArgs {
   draftRef: RefObject<string>
   drainNextQueued: () => Promise<boolean>
   editorRef: RefObject<HTMLDivElement | null>
+  executionMode: 'normal' | 'plan'
   exitQueuedEdit: (action: 'cancel' | 'save') => boolean
   focusInput: () => void
   inputDisabled: boolean
@@ -63,6 +64,7 @@ export function useComposerSubmit({
   draftRef,
   drainNextQueued,
   editorRef,
+  executionMode,
   exitQueuedEdit,
   focusInput,
   inputDisabled,
@@ -248,7 +250,7 @@ export function useComposerSubmit({
     triggerHaptic('submit')
     clearDraft()
 
-    void Promise.resolve(onSteer(text)).then(accepted => {
+    void Promise.resolve(onSteer(text, { executionMode })).then(accepted => {
       if (!accepted && activeQueueSessionKey) {
         enqueueQueuedPrompt(activeQueueSessionKey, { text, attachments: [] })
       }

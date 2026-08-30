@@ -33,6 +33,7 @@ interface UseComposerQueueArgs {
   busy: boolean
   clearDraft: () => void
   draftRef: RefObject<string>
+  executionMode: 'normal' | 'plan'
   focusInput: () => void
   loadIntoComposer: (text: string, attachments: ComposerAttachment[]) => void
   onCancel: ChatBarProps['onCancel']
@@ -58,6 +59,7 @@ export function useComposerQueue({
   busy,
   clearDraft,
   draftRef,
+  executionMode,
   focusInput,
   loadIntoComposer,
   onCancel,
@@ -185,7 +187,7 @@ export function useComposerQueue({
       return false
     }
 
-    if (!enqueueQueuedPrompt(activeQueueSessionKey, { text, attachments })) {
+    if (!enqueueQueuedPrompt(activeQueueSessionKey, { text, attachments, executionMode })) {
       return false
     }
 
@@ -194,7 +196,7 @@ export function useComposerQueue({
     triggerHaptic('selection')
 
     return true
-  }, [activeQueueSessionKey, attachments, clearDraft, draftRef, scope.attachments])
+  }, [activeQueueSessionKey, attachments, clearDraft, draftRef, executionMode, scope.attachments])
 
   // All queue drain paths share one lock + send-then-remove sequence.
   // `pickEntry` lets each caller choose head, by-id, or skip-edited.
@@ -219,6 +221,7 @@ export function useComposerQueue({
           onSubmit(entry.text, {
             attachments: entry.attachments,
             ...(entry.displayText ? { displayText: entry.displayText } : {}),
+            ...(entry.executionMode === 'plan' ? { executionMode: 'plan' as const } : {}),
             fromQueue: true,
             sessionId: drainRuntimeSessionId,
             storedSessionId: drainQueueSessionKey
@@ -304,9 +307,17 @@ export function useComposerQueue({
         return false
       }
 
+      const entryExecutionMode = entry.executionMode ?? 'normal'
+
+      if (entryExecutionMode !== executionMode) {
+        return sendQueuedNow(id)
+      }
+
       triggerHaptic('submit')
 
-      const accepted = await Promise.resolve(onSteer(entry.text))
+      const accepted = await Promise.resolve(
+        onSteer(entry.text, { executionMode: entryExecutionMode })
+      )
 
       // Rejected (turn already settling, gateway said no): leave the entry
       // queued exactly where it was — the settle drain picks it up, so the
@@ -323,7 +334,7 @@ export function useComposerQueue({
 
       return true
     },
-    [activeQueueSessionKey, busy, onSteer, queueEditRef]
+    [activeQueueSessionKey, busy, executionMode, onSteer, queueEditRef, sendQueuedNow]
   )
 
   // Edge-independent auto-drain: send the head whenever the session is idle and

@@ -8,13 +8,22 @@ import {
 } from '@/hermes'
 import { translateNow } from '@/i18n/runtime'
 import { type ChatMessage, toChatMessages } from '@/lib/chat-messages'
+import {
+  executionModeOwnerProfile,
+  executionModeSessionKey,
+  getExecutionMode
+} from '@/store/execution-mode'
 import { notify } from '@/store/notifications'
 import {
   isReadOnlyRuntimeId,
   readOnlyRuntimeIdFor,
   resumeWithStoredTranscriptFallback
 } from '@/store/read-only-transcript'
-import { knownSessionOwner, ownerLookupSessionRows } from '@/store/session'
+import {
+  knownSessionOwner,
+  ownerLookupSessionRows,
+  resolveComposerSessionKey
+} from '@/store/session'
 import { assertSessionOwnerResolved } from '@/store/session-owner-resolution'
 import { requestForSessionProfile, type SessionOwnerScope } from '@/store/session-request-router'
 import { publishSessionState, sessionTileOwnerRoute, setSessionTileDelegate } from '@/store/session-states'
@@ -340,7 +349,7 @@ export function useSessionTileDelegate({
 
         return runtimeId
       },
-      submitToSession: async (runtimeId, text) => {
+      submitToSession: async (runtimeId, text, options) => {
         // A read-only stored-transcript tile has no live runtime to submit
         // into (#94724). Refuse with the explanation instead of minting a
         // misrouted prompt on a backend that never owned the session.
@@ -351,6 +360,21 @@ export function useSessionTileDelegate({
         }
 
         const storedSessionId = storedSessionIdForRuntime(runtimeId)
+        const modeRows = ownerLookupSessionRows()
+
+        const executionMode =
+          options?.executionMode ??
+          (storedSessionId
+            ? getExecutionMode(
+                executionModeSessionKey(
+                  executionModeOwnerProfile(
+                    sessionTileOwnerRoute(storedSessionId) ??
+                      knownSessionOwner(modeRows, storedSessionId)
+                  ),
+                  resolveComposerSessionKey(storedSessionId, modeRows) || storedSessionId
+                )
+              )
+            : 'normal')
 
         const routedRequest = storedSessionId
           ? <T>(method: string, params?: Record<string, unknown>, timeoutMs?: number) =>
@@ -360,7 +384,16 @@ export function useSessionTileDelegate({
         await withSessionNotFoundResume(
           runtimeId,
           storedSessionId,
-          liveId => routedRequest('prompt.submit', { session_id: liveId, text }, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS),
+          liveId =>
+            routedRequest(
+              'prompt.submit',
+              {
+                session_id: liveId,
+                text,
+                ...(executionMode === 'plan' && { execution_mode: 'plan' })
+              },
+              PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
+            ),
           { requestGateway: routedRequest, onRecovered: rebindTileRuntime(runtimeId) }
         )
       },

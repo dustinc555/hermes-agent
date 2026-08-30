@@ -2513,6 +2513,7 @@ export const zh: Translations = {
     placeholderStarting: '正在启动 Hermes…',
     placeholderReconnecting: '正在重新连接 Hermes…',
     placeholderFollowUp: '发送后续消息',
+    placeholderPlan: '描述你想规划的内容…',
     newSessionPlaceholders: [
       '我们要构建什么？',
       '给 Hermes 一个任务',

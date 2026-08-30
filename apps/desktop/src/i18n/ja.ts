@@ -2008,6 +2008,7 @@ export const ja = defineLocale({
     placeholderStarting: 'Hermes を起動中...',
     placeholderReconnecting: 'Hermes に再接続中…',
     placeholderFollowUp: 'フォローアップを送信',
+    placeholderPlan: '計画してほしい内容を説明してください…',
     newSessionPlaceholders: [
       '何を作りますか？',
       'Hermes にタスクを与える',

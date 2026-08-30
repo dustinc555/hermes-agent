@@ -1276,7 +1276,11 @@ export interface SessionTileDelegate {
    *  invalidateRuntimeBindings (#93059). */
   retireBusyClaim?(runtimeId: string): boolean
   /** Submit a prompt to a tile's live session. */
-  submitToSession(runtimeId: string, text: string): Promise<void>
+  submitToSession(
+    runtimeId: string,
+    text: string,
+    options?: { executionMode?: 'normal' | 'plan' }
+  ): Promise<void>
   /** THE session-state write path — routes through the wiring cache so the
    *  cache, the primary view (when active), and every tile mirror agree. */
   updateSession(runtimeId: string, updater: (state: ClientSessionState) => ClientSessionState): ClientSessionState

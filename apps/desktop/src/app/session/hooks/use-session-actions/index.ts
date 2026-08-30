@@ -29,6 +29,10 @@ import { $clarifyRequests } from '@/store/clarify'
 import { migrateSessionDraft } from '@/store/composer'
 import { clearQueuedPrompts, migrateQueuedPrompts } from '@/store/composer-queue'
 import {
+  executionModeDraftKey,
+  setExecutionMode
+} from '@/store/execution-mode'
+import {
   openGatewayForAgent,
   openGatewayForProfile,
   requestGatewayForAgent,
@@ -405,6 +409,14 @@ export function useSessionActions({
       const workspaceTarget = hasWorkspaceTarget
         ? normalizeNewChatWorkspaceTarget(draftOptions.workspaceTarget)
         : undefined
+
+      setExecutionMode(
+        executionModeDraftKey(
+          normalizeProfileKey($activeGatewayProfile.get()),
+          'main'
+        ),
+        'normal'
+      )
 
       resetViewSync()
       busyRef.current = false

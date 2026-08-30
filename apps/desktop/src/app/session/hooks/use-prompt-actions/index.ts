@@ -22,6 +22,11 @@ import {
   updateComposerAttachment
 } from '@/store/composer'
 import { resetSessionBackground } from '@/store/composer-status'
+import {
+  executionModeOwnerProfile,
+  executionModeSessionKey,
+  getExecutionMode
+} from '@/store/execution-mode'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
@@ -31,8 +36,11 @@ import {
   $connection,
   $currentCwd,
   $messages,
+  $sessions,
   $terminalBackend,
   getSessionOwnerHint,
+  knownSessionOwner,
+  resolveComposerSessionKey,
   setActiveSessionId,
   setAwaitingResponse,
   setBusy,
@@ -759,7 +767,10 @@ export function usePromptActions({
   // completed work intact. During a tool it waits for the safe result boundary.
   // Returns false when the turn raced to completion so the composer can queue.
   const redirectPrompt = useCallback(
-    async (rawText: string): Promise<boolean> => {
+    async (
+      rawText: string,
+      options?: Pick<SubmitTextOptions, 'executionMode'>
+    ): Promise<boolean> => {
       const text = sanitizeComposerInput(rawText).trim()
       // Ref, not the closure-captured prop — see cancelRun above. A redirect
       // reaches the live model mid-turn, so a stale target delivers the user's
@@ -799,7 +810,11 @@ export function usePromptActions({
           })
 
         try {
-          const result = await requestGateway<SessionRedirectResponse>('session.redirect', { session_id: id, text })
+          const result = await requestGateway<SessionRedirectResponse>('session.redirect', {
+            session_id: id,
+            text,
+            execution_mode: options?.executionMode ?? 'normal'
+          })
 
           if (result?.status === 'redirected') {
             triggerHaptic('submit')
@@ -886,6 +901,19 @@ export function usePromptActions({
         interruptFirst,
         {
           storedSessionId: selectedStoredSessionIdRef.current,
+          executionMode: selectedStoredSessionIdRef.current
+            ? getExecutionMode(
+                executionModeSessionKey(
+                  executionModeOwnerProfile(
+                    knownSessionOwner($sessions.get(), selectedStoredSessionIdRef.current)
+                  ),
+                  resolveComposerSessionKey(
+                    selectedStoredSessionIdRef.current,
+                    $sessions.get()
+                  ) || selectedStoredSessionIdRef.current
+                )
+              )
+            : 'normal',
           onSessionRecovered: recoveredId => {
             activeSessionIdRef.current = recoveredId
             setActiveSessionId(recoveredId)

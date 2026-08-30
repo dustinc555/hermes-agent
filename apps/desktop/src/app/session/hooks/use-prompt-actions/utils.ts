@@ -707,6 +707,10 @@ export interface SubmitTextOptions {
    *  renders anywhere — the off-screen path for widget intents. The agent
    *  still receives the text as a normal user turn. */
   displayKind?: 'hidden'
+  /** Immutable execution policy captured when the user submits this turn. */
+  executionMode?: 'normal' | 'plan'
+  /** Source key for draft-to-durable mode migration after a real session create. */
+  executionModeKey?: string
   fromQueue?: boolean
   /** Runtime session id to submit into. Queue drains pass this so a
    *  backgrounded/source session cannot be replaced by the current foreground

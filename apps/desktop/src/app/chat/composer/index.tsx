@@ -90,6 +90,7 @@ export function ChatBar({
   busy,
   cwd,
   disabled,
+  executionMode = 'normal',
   focusKey,
   gateway,
   maxRecordingSeconds = 120,
@@ -307,6 +308,7 @@ export function ChatBar({
     busy,
     clearDraft,
     draftRef,
+    executionMode,
     focusInput,
     loadIntoComposer,
     onCancel,
@@ -371,6 +373,7 @@ export function ChatBar({
     draftRef,
     drainNextQueued,
     editorRef,
+    executionMode,
     exitQueuedEdit,
     focusInput,
     inputDisabled,
@@ -390,7 +393,8 @@ export function ChatBar({
 
   // Resting / reconnecting / starting placeholder text, re-rolled only on a real
   // conversation change.
-  const placeholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+  const restingPlaceholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+  const placeholder = executionMode === 'plan' && !disabled ? t.composer.placeholderPlan : restingPlaceholder
 
   // Trigger / completion engine: @// detection, the adapter-driven item list,
   // popover selection, and chip insertion. The keydown nav block below consumes
@@ -1023,6 +1027,7 @@ export function ChatBar({
         status: conversation.status
       }}
       disabled={disabled}
+      executionMode={executionMode}
       foldVoice={foldVoice}
       hasComposerPayload={hasComposerPayload}
       minimal={minimal}
@@ -1305,8 +1310,18 @@ export function ChatBar({
                   COMPOSER_DROP_FADE_CLASS,
                   dragActive && COMPOSER_DROP_ACTIVE_CLASS
                 )}
+                data-execution-mode={executionMode}
                 data-slot="composer-surface"
                 ref={composerSurfaceRef}
+                style={
+                  executionMode === 'plan'
+                    ? {
+                        borderColor: 'color-mix(in srgb, var(--ui-purple) 62%, var(--dt-input))',
+                        boxShadow:
+                          '0 0 0 1px color-mix(in srgb, var(--ui-purple) 30%, transparent), 0 0 14px color-mix(in srgb, var(--ui-purple) 18%, transparent)'
+                      }
+                    : undefined
+                }
               >
                 <div
                   aria-hidden
@@ -1315,6 +1330,15 @@ export function ChatBar({
                     composerFill,
                     composerSurfaceGlass
                   )}
+                  data-slot="composer-fill"
+                  style={
+                    executionMode === 'plan'
+                      ? {
+                          background:
+                            'color-mix(in srgb, var(--ui-purple) 6%, var(--composer-fill))'
+                        }
+                      : undefined
+                  }
                 />
                 <CodingStatusRow
                   onBranchOff={handleBranchOff}

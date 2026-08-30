@@ -18,12 +18,19 @@ import {
   mainComposerScope,
   terminalContextBlocksFromDraft
 } from '@/store/composer'
+import {
+  executionModeOwnerProfile,
+  executionModeSessionKey,
+  getExecutionMode,
+  migrateDraftExecutionModeToSession
+} from '@/store/execution-mode'
 import { $hudMode } from '@/store/hud'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
 import { consumePendingCredentialWarning, requestDesktopOnboarding } from '@/store/onboarding'
 import { isStoredTranscriptReadOnly } from '@/store/read-only-transcript'
 import {
   $sessions,
+  knownSessionOwner,
   resolveComposerSessionKey,
   setActiveSessionId,
   setAwaitingResponse,
@@ -719,6 +726,23 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         // to the ambient socket — the fresh-chat owner loss behind #94071.
         targetStoredSessionId = selectedStoredSessionIdRef.current
 
+        if (targetStoredSessionId) {
+          const modeRows = $sessions.get()
+
+          const modeStoredId =
+            resolveComposerSessionKey(targetStoredSessionId, modeRows) || targetStoredSessionId
+
+          const modeProfile = executionModeOwnerProfile(
+            knownSessionOwner(modeRows, targetStoredSessionId)
+          )
+
+          migrateDraftExecutionModeToSession(
+            options?.executionModeKey,
+            modeProfile,
+            modeStoredId
+          )
+        }
+
         seedOptimistic(sessionId)
       }
 
@@ -753,9 +777,23 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         rewriteOptimistic(liveSessionId)
         const text = buildContextText(syncedAttachments)
 
+        const executionMode =
+          options?.executionMode ??
+          (targetStoredSessionId
+            ? getExecutionMode(
+                executionModeSessionKey(
+                  executionModeOwnerProfile(
+                    knownSessionOwner($sessions.get(), targetStoredSessionId)
+                  ),
+                  resolveComposerSessionKey(targetStoredSessionId, $sessions.get()) || targetStoredSessionId
+                )
+              )
+            : 'normal')
+
         const submitParams = (targetId: string) => ({
           session_id: targetId,
           text,
+          ...(executionMode === 'plan' && { execution_mode: 'plan' }),
           ...(interrupted && { interrupted }),
           // Off-screen widget intent: the gateway types the persisted user
           // row display_kind=hidden so no client renders it as a bubble.

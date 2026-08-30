@@ -103,6 +103,7 @@ function renderSubmitHook({
         draftRef,
         drainNextQueued: vi.fn(async () => false),
         editorRef,
+        executionMode: 'normal',
         exitQueuedEdit: vi.fn(() => false),
         focusInput: vi.fn(),
         inputDisabled,
@@ -280,7 +281,9 @@ describe('useComposerSubmit busy-turn routing', () => {
       hook.result.current.submitDraft()
     })
 
-    await waitFor(() => expect(onSteer).toHaveBeenCalledWith('change course'))
+    await waitFor(() =>
+      expect(onSteer).toHaveBeenCalledWith('change course', { executionMode: 'normal' })
+    )
     expect(queueCurrentDraft).not.toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
     expect(onSubmit).not.toHaveBeenCalled()
@@ -437,7 +440,9 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
       hook.result.current.submitDraft()
     })
 
-    await waitFor(() => expect(onSteer).toHaveBeenCalledWith('change course'))
+    await waitFor(() =>
+      expect(onSteer).toHaveBeenCalledWith('change course', { executionMode: 'normal' })
+    )
     expect(gatewayRequest).toHaveBeenCalledWith('clarify.respond', { request_id: 'req-runtime-session', answer: '' })
   })
 
@@ -545,7 +550,9 @@ describe('useComposerSubmit with a blocking prompt parked on the session', () =>
       hook.result.current.submitDraft()
     })
 
-    await waitFor(() => expect(onSteer).toHaveBeenCalledWith('change course'))
+    await waitFor(() =>
+      expect(onSteer).toHaveBeenCalledWith('change course', { executionMode: 'normal' })
+    )
     expect(queueCurrentDraft).not.toHaveBeenCalled()
   })
 

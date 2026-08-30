@@ -286,11 +286,13 @@ def _pending_reaction_notes(session: dict) -> str:
 
 @method("prompt.submit")
 def _(rid, params: dict) -> dict:
+    from agent.execution_mode import normalize_execution_mode
     from hermes_cli.input_sanitize import sanitize_user_prompt_text
 
     sid = params.get("session_id", "")
     raw_text = params.get("text", "")
     text = sanitize_user_prompt_text(raw_text) if isinstance(raw_text, str) else raw_text
+    execution_mode = normalize_execution_mode(params.get("execution_mode"))
     # Off-screen sends (widget intents): type the persisted user row so no
     # client renders it as a bubble. Whitelisted to "hidden" — display_kind
     # is a DB-only sidecar and this RPC must not mint arbitrary kinds.
@@ -376,6 +378,7 @@ def _(rid, params: dict) -> dict:
         busy_response = _handle_busy_submit(
             rid, sid, session, text, busy_transport,
             queued=bool(params.get("queued")),
+            execution_mode=execution_mode,
         )
         if busy_response is not None:
             return busy_response
@@ -816,7 +819,12 @@ def _(rid, params: dict) -> dict:
 
     if turn_isolation:
         isolated_response = _submit_prompt_to_compute_host(
-            rid, sid, session, text, display_kind=display_kind
+            rid,
+            sid,
+            session,
+            text,
+            display_kind=display_kind,
+            execution_mode=execution_mode,
         )
         if not isolated_response.get("error"):
             if survivor_user_row_ids is not None and requested_rebind_ids is None:
@@ -908,7 +916,14 @@ def _(rid, params: dict) -> dict:
                     },
                 )
                 return
-        _run_prompt_submit(rid, sid, session, text, display_kind=display_kind)
+        _run_prompt_submit(
+            rid,
+            sid,
+            session,
+            text,
+            display_kind=display_kind,
+            execution_mode=execution_mode,
+        )
 
     run_thread = threading.Thread(target=run_after_agent_ready, daemon=True)
     # Keep a handle so session.interrupt can tell a live turn from a stuck

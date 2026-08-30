@@ -7,9 +7,11 @@ import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { AudioLines, Ear, EarOff, iconSize, Layers3, Loader2, Square, Volume2, VolumeX } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import type { ExecutionMode } from '@/store/execution-mode'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
 
+import { PlanModeIndicator } from '../plan-mode'
 import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { ModelPill } from './model-pill'
@@ -39,6 +41,7 @@ export function ComposerControls({
   compactModelPill = false,
   conversation,
   disabled,
+  executionMode,
   foldVoice = false,
   hasComposerPayload,
   minimal = false,
@@ -55,6 +58,7 @@ export function ComposerControls({
   compactModelPill?: boolean
   conversation: ConversationProps
   disabled: boolean
+  executionMode: ExecutionMode
   foldVoice?: boolean
   hasComposerPayload: boolean
   minimal?: boolean
@@ -84,6 +88,11 @@ export function ComposerControls({
   // even the menu goes: at `minimal` the row is the send button and nothing
   // else, which is the one thing that must survive every width.
   const foldedVoice = hudMode || foldVoice
+  const primaryClassName = cn(
+    PRIMARY_ICON_BTN,
+    executionMode === 'plan' &&
+      'bg-(--ui-purple) text-white hover:bg-[color-mix(in_srgb,var(--ui-purple)_84%,white)] disabled:bg-[color-mix(in_srgb,var(--ui-purple)_35%,transparent)] disabled:text-white'
+  )
 
   const voiceControls = foldedVoice ? (
     <VoiceMenu
@@ -104,10 +113,14 @@ export function ComposerControls({
   )
 
   return (
-    <div className="ml-auto flex min-w-0 shrink items-center gap-(--composer-control-gap)">
+    <div
+      className="ml-auto flex min-w-0 shrink items-center gap-(--composer-control-gap)"
+      data-slot="composer-controls"
+    >
       {minimal ? null : (
         <>
           <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
+          {executionMode === 'plan' ? <PlanModeIndicator /> : null}
           {voiceControls}
         </>
       )}
@@ -130,7 +143,8 @@ export function ComposerControls({
         <Tip label={c.startVoice}>
           <Button
             aria-label={c.startVoice}
-            className={PRIMARY_ICON_BTN}
+            className={primaryClassName}
+            data-execution-mode={executionMode}
             disabled={disabled}
             onClick={() => {
               triggerHaptic('open')
@@ -154,7 +168,8 @@ export function ComposerControls({
         >
           <Button
             aria-label={showStop ? c.stop : c.send}
-            className={PRIMARY_ICON_BTN}
+            className={primaryClassName}
+            data-execution-mode={executionMode}
             disabled={disabled || !canSubmit}
             type="submit"
           >

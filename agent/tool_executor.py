@@ -594,6 +594,21 @@ def _run_agent_tool_execution_middleware(
     authorization_gate: _ConcurrentToolAuthorizationGate | None = None,
 ) -> _ManagedToolResult:
     """Run Relay rewrites before Hermes policy and dispatch exactly once."""
+    from agent.execution_mode import plan_mode_block_message
+
+    plan_block = plan_mode_block_message(
+        getattr(agent, "_current_execution_mode", "normal"),
+        function_name,
+    )
+    if plan_block is not None:
+        return _ManagedToolResult(
+            result=json.dumps({"error": plan_block}, ensure_ascii=False),
+            args=function_args,
+            middleware_trace=list(middleware_trace or []),
+            blocked=True,
+            dispatched=False,
+        )
+
     from agent import relay_tools
     from hermes_cli.middleware import (
         apply_tool_request_middleware,

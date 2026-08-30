@@ -34,6 +34,7 @@ export interface ChatBarState {
 export interface ChatBarProps {
   busy: boolean
   disabled: boolean
+  executionMode?: 'normal' | 'plan'
   focusKey?: string | null
   maxRecordingSeconds?: number
   state: ChatBarState
@@ -54,7 +55,10 @@ export interface ChatBarProps {
   onPickFolders?: () => void
   onPickImages?: () => void
   onRemoveAttachment?: (id: string) => void
-  onSteer?: (text: string) => Promise<boolean> | boolean
+  onSteer?: (
+    text: string,
+    options?: Pick<SubmitTextOptions, 'executionMode'>
+  ) => Promise<boolean> | boolean
   onSubmit: (value: string, options?: SubmitTextOptions) => Promise<boolean> | boolean
   onTranscribeAudio?: (audio: Blob) => Promise<string>
 }

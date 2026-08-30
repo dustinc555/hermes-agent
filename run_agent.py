@@ -8606,6 +8606,7 @@ class AIAgent:
         persist_user_display_kind: Optional[str] = None,
         persist_user_display_metadata: Optional[Dict[str, Any]] = None,
         moa_config: Optional[dict[str, Any]] = None,
+        execution_mode: str = "normal",
     ) -> Dict[str, Any]:
         """Forwarder — see ``agent.conversation_loop.run_conversation``."""
         # A review deliberately shares this agent's session_id for prompt-cache
@@ -8957,6 +8958,12 @@ class AIAgent:
                 getattr(self, "session_id", None),
             )
             from agent.auxiliary_client import scoped_runtime_main
+            from agent.execution_mode import normalize_execution_mode
+
+            previous_execution_mode = getattr(
+                self, "_current_execution_mode", "normal"
+            )
+            self._current_execution_mode = normalize_execution_mode(execution_mode)
 
             # The outer token restores the caller's Context even though turn setup
             # replaces the value with the live runtime after fallback restoration.
@@ -8986,6 +8993,7 @@ class AIAgent:
                     # those post-loop steps must not receive a late refresh
                     # interrupt that poisons the next turn on a cached agent.
                     _stop_durable_turn_lease_refresher()
+                    self._current_execution_mode = previous_execution_mode
                     # Interrupt clear is deferred to after thread join in the
                     # outer finally: a refresher firing between stop and join
                     # would otherwise set an interrupt that survives the clear.

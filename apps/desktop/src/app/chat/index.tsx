@@ -28,6 +28,11 @@ import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
+import {
+  executionModeOwnerProfile,
+  migrateExecutionMode,
+  setExecutionMode
+} from '@/store/execution-mode'
 import { $introSplash } from '@/store/intro-splash'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $petActive } from '@/store/pet'
@@ -43,12 +48,18 @@ import {
   $resumeExhaustedSessionId,
   $sessions,
   getSessionOwnerHint,
+  idsShareLineage,
+  knownSessionOwner,
   resolveComposerSessionKey,
   sessionMatchesStoredId,
   sessionPinId,
   shouldMigrateComposerScope
 } from '@/store/session'
-import { $focusedStoredSessionId, sessionTileDelegate } from '@/store/session-states'
+import {
+  $focusedStoredSessionId,
+  sessionTileDelegate,
+  sessionTileOwnerRoute
+} from '@/store/session-states'
 import { $transcriptTailBySessionId, transcriptTailState } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
 import type { ModelOptionsResponse } from '@/types/hermes'
@@ -66,6 +77,12 @@ import type { ChatBarState } from './composer/types'
 import { type DroppedFile, partitionDroppedFiles } from './hooks/use-composer-actions'
 import { type DragKind, useFileDropZone } from './hooks/use-file-drop-zone'
 import { shouldShowIntro } from './intro-visibility'
+import {
+  planModeKey,
+  shouldCapturePlanTab,
+  useExecutionMode,
+  withExecutionModeSnapshot
+} from './plan-mode'
 import { ProfileTag } from './profile-tag'
 import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
@@ -150,7 +167,10 @@ function ChatHeader({
   // Secondary windows (new-session scratch, subagent watch, cmd-click pop-out)
   // are compact side panels — they drop the session-actions header + border
   // entirely. A brand-new draft has nothing to pin/delete/rename either.
-  if (isAuxiliaryWindow() || (!selectedSessionId && !activeSessionId && !isRoutedSessionView)) {
+  if (
+    isAuxiliaryWindow() ||
+    (!selectedSessionId && !activeSessionId && !isRoutedSessionView)
+  ) {
     return null
   }
 
@@ -451,6 +471,87 @@ const ChatViewContent = memo(function ChatViewContent({
     return resolveComposerSessionKey(effectiveSelectedSessionId, sessions)
   }, [isPrimary, location.pathname, selectedSessionId, sessions])
 
+  const executionModeStoredId = queueSessionKey || storedId
+
+  const executionModeProfile = executionModeStoredId
+    ? executionModeOwnerProfile(
+        sessionTileOwnerRoute(executionModeStoredId) ??
+          knownSessionOwner(sessions, executionModeStoredId)
+      )
+    : activeGatewayProfile || 'default'
+
+  const executionModeKey = planModeKey(
+    executionModeProfile,
+    executionModeStoredId,
+    composerScope.target
+  )
+
+  const [previousExecutionModeStoredId, setPreviousExecutionModeStoredId] =
+    useState(executionModeStoredId)
+
+  const lineageRekey =
+    previousExecutionModeStoredId !== null &&
+    executionModeStoredId !== null &&
+    previousExecutionModeStoredId !== executionModeStoredId &&
+    idsShareLineage(previousExecutionModeStoredId, executionModeStoredId, sessions)
+
+  const previousExecutionModeProfile = previousExecutionModeStoredId
+    ? executionModeOwnerProfile(
+        sessionTileOwnerRoute(previousExecutionModeStoredId) ??
+          knownSessionOwner(sessions, previousExecutionModeStoredId)
+      )
+    : executionModeProfile
+
+  const lineageSourceKey = lineageRekey
+    ? planModeKey(
+        previousExecutionModeProfile,
+        previousExecutionModeStoredId,
+        composerScope.target
+      )
+    : null
+
+  const executionMode = useExecutionMode(executionModeKey, lineageSourceKey)
+
+  useEffect(() => {
+    if (lineageSourceKey) {
+      migrateExecutionMode(lineageSourceKey, executionModeKey)
+    }
+
+    setPreviousExecutionModeStoredId(executionModeStoredId)
+  }, [executionModeKey, executionModeStoredId, lineageSourceKey])
+
+  const submitWithExecutionMode = useCallback(
+    (text: string, options?: SubmitTextOptions) =>
+      onSubmit(
+        text,
+        withExecutionModeSnapshot(options, executionMode, executionModeKey)
+      ),
+    [executionMode, executionModeKey, onSubmit]
+  )
+
+  const surfaceRef = useRef<HTMLDivElement>(null)
+
+  const handlePlanModeKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      const surface = surfaceRef.current
+
+      if (!surface || !shouldCapturePlanTab(event, surface, surfaceFocused)) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      setExecutionMode(executionModeKey, executionMode === 'plan' ? 'normal' : 'plan')
+    },
+    [executionMode, executionModeKey, surfaceFocused]
+  )
+
+  useEffect(() => {
+    window.addEventListener('keydown', handlePlanModeKeyDown, true)
+
+    return () => window.removeEventListener('keydown', handlePlanModeKeyDown, true)
+  }, [handlePlanModeKeyDown])
+
   // When the tip row arrives after compression, migrate any tip-keyed stash onto
   // the durable lineage key before the composer remounts onto that key.
   //
@@ -622,6 +723,7 @@ const ChatViewContent = memo(function ChatViewContent({
       data-composer-surface-id={composerSurfaceId}
       data-composer-target={composerScope.target}
       data-session-anchor={sessionAnchor}
+      ref={surfaceRef}
     >
       <Backdrop />
       {/* Tiles get their chrome from the layout zone (chip strip); the modal
@@ -717,6 +819,7 @@ const ChatViewContent = memo(function ChatViewContent({
               busy={busy}
               cwd={currentCwd}
               disabled={!gatewayOpen}
+              executionMode={executionMode}
               focusKey={activeSessionId}
               gateway={gateway}
               maxRecordingSeconds={maxVoiceRecordingSeconds}
@@ -732,7 +835,7 @@ const ChatViewContent = memo(function ChatViewContent({
               onPickImages={onPickImages}
               onRemoveAttachment={onRemoveAttachment}
               onSteer={onSteer}
-              onSubmit={onSubmit}
+              onSubmit={submitWithExecutionMode}
               onTranscribeAudio={onTranscribeAudio}
               queueSessionKey={queueSessionKey}
               sessionId={activeSessionId}

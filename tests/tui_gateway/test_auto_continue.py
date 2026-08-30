@@ -105,12 +105,19 @@ def turn_env(monkeypatch, tmp_path, marker_home):
 
 
 def test_marker_roundtrip(tmp_path):
-    record_turn_start(tmp_path, "abc", "fix the bug", attempts=1)
+    record_turn_start(
+        tmp_path,
+        "abc",
+        "fix the bug",
+        attempts=1,
+        execution_mode="plan",
+    )
 
     marker = read_turn_marker(tmp_path, "abc")
     assert marker is not None
     assert marker["prompt"] == "fix the bug"
     assert marker["attempts"] == 1
+    assert marker["execution_mode"] == "plan"
     assert marker["started_at"] == pytest.approx(time.time(), abs=5)
 
     clear_turn_marker(tmp_path, "abc")
@@ -247,7 +254,12 @@ def schedule_env(monkeypatch, marker_home):
 
 
 def test_fresh_marker_schedules_continuation(emits, schedule_env, marker_home):
-    record_turn_start(marker_home, "session-key", "fix the flaky test")
+    record_turn_start(
+        marker_home,
+        "session-key",
+        "fix the flaky test",
+        execution_mode="plan",
+    )
     session = _session()
 
     result = server._maybe_schedule_auto_continue("sid", session, "session-key")
@@ -260,6 +272,7 @@ def test_fresh_marker_schedules_continuation(emits, schedule_env, marker_home):
     assert text.startswith("[System note: Your previous turn was interrupted")
     assert "fix the flaky test" in text
     assert kwargs["display_kind"] == "auto_continue"
+    assert kwargs["execution_mode"] == "plan"
     assert ("message.start", "sid", None) in [(e, s, p) for e, s, p in emits]
 
 
