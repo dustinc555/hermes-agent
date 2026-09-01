@@ -22,6 +22,8 @@ export interface StripPane {
   /** Standing chrome (sessions / Bots) whose only handle is the strip:
    *  show/hide replaces Close, and the Show/Hide rows live on the strip. */
   hideOnly?: boolean
+  /** Forces a visible strip because its chevron is this pane's minimize path. */
+  minimizable?: boolean
   /** Contribution placement — `'main'` marks a docked tile (session, page,
    *  preview) as opposed to standing side chrome. */
   placement?: string
@@ -57,6 +59,10 @@ function stranded(shown: readonly StripPane[]): boolean {
   }
 
   if (shown.some(pane => pane.hideOnly)) {
+    return true
+  }
+
+  if (shown.some(pane => pane.minimizable)) {
     return true
   }
 
@@ -113,6 +119,7 @@ export function tabStripVisibleForZone(zone: {
       return {
         collapsePane: zone.isCollapsePane(id),
         hideOnly: chrome.hideOnly,
+        minimizable: chrome.minimizable,
         placement: chrome.placement,
         uncloseable: chrome.uncloseable
       }

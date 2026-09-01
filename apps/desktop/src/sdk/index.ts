@@ -1462,6 +1462,9 @@ export { SkillsView } from '@/app/skills'
  *  renders anywhere (a plugin dialog); pass a live `gateway` (see
  *  `host.getGateway()`) and an optional `profile` to scope it to one bot. */
 export { McpTab } from '@/app/skills/mcp-tab'
+/** Filename-aware, Shiki-backed full-file diff with virtualization, line
+ * numbers, add/remove tints, and a safe plain-text fallback. */
+export { FileDiffPanel } from '@/components/chat/diff-lines'
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'

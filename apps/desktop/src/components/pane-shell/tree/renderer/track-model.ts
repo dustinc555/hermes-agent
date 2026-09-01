@@ -52,6 +52,9 @@ interface PaneChrome extends PaneSizing {
    *  persisted on the zone and wins from then on. Applied when the pane ENTERS
    *  the tree, not on every boot, so it is a default and not an invariant. */
   defaultCollapsed?: boolean
+  /** May minimize to a named restore rail even when `uncloseable`. Required
+   *  panes use this to stay present without permanently consuming their track. */
+  minimizable?: boolean
   /** Extra ids accepted from PANE_TOGGLE_REVEAL_EVENT (the real app's pane
    *  ids, e.g. `chat-sidebar` for `sessions`). */
   revealAliases?: string[]

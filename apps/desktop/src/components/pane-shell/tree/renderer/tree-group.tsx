@@ -378,9 +378,13 @@ export function TreeGroup({
     return chrome.uncloseable || chrome.hideOnly ? undefined : paneId
   }
 
-  // The zone hosting the uncloseable workspace never minimizes — collapsing
-  // MAIN strands the whole app behind a strip.
-  const minimizable = !shown.some(id => paneChrome(paneFor(id)).uncloseable)
+  // The uncloseable workspace never minimizes, but a required side pane may
+  // explicitly opt into a named restore rail without becoming closeable.
+  const minimizable = !shown.some(id => {
+    const chrome = paneChrome(paneFor(id))
+
+    return chrome.uncloseable && !chrome.minimizable
+  })
 
   // Middle-click / ⌘-click on a tab: one routing for every tab kind, the same
   // one the zone menu's Close and ⌘W use.

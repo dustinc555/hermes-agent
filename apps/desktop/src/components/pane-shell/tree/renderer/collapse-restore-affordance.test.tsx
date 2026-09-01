@@ -202,6 +202,39 @@ describe('docked tool tile — collapsing keeps the restore chip', () => {
   })
 })
 
+describe('required review pane — uncloseable but minimizable', () => {
+  beforeEach(() => {
+    registerPane('workspace', { placement: 'main', uncloseable: true }, 'Chat')
+    registerPane(
+      'full-file-changes:changes',
+      { minimizable: true, placement: 'main', uncloseable: true, width: '44vw' },
+      'Changes'
+    )
+    $layoutTree.set(
+      split('row', [
+        group(['workspace'], { active: 'workspace', id: 'g-main' }),
+        group(['full-file-changes:changes'], { active: 'full-file-changes:changes', id: 'g-changes' })
+      ])
+    )
+  })
+
+  it('offers minimize without offering close', () => {
+    render(<LiveTreeGroup index={1} parentAxis="row" />)
+
+    expect(globalThis.document.querySelector('[data-tree-group="g-changes"] button[aria-label="Minimize"]')).toBeTruthy()
+    expect(globalThis.document.querySelector('[data-tree-tab="full-file-changes:changes"] button[aria-label="Close"]')).toBeNull()
+  })
+
+  it('collapses to a named restore rail', () => {
+    render(<LiveTreeGroup index={1} parentAxis="row" />)
+
+    fireEvent.click(globalThis.document.querySelector('[data-tree-group="g-changes"] button[aria-label="Minimize"]')!)
+
+    expect(zoneAt(1).minimized).toBe(true)
+    expect(tabEl('full-file-changes:changes')?.textContent).toMatch(/changes/i)
+  })
+})
+
 describe('a stacked tool zone collapsed in a row keeps the horizontal strip', () => {
   beforeEach(() => {
     registerPane('workspace', { placement: 'main', uncloseable: true }, 'Chat')

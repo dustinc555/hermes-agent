@@ -11,6 +11,13 @@ const toolPanel = (): StripPane => ({ collapsePane: true, placement: 'bottom' })
 const sideChrome = (): StripPane => ({ collapsePane: false, placement: 'right' })
 const hideOnlyChrome = (): StripPane => ({ collapsePane: false, hideOnly: true, placement: 'left' })
 
+const requiredReview = (): StripPane => ({
+  collapsePane: false,
+  minimizable: true,
+  placement: 'main',
+  uncloseable: true
+})
+
 describe('auto (no stored choice)', () => {
   it('gives a lone workspace no strip and a stack of two a strip', () => {
     expect(resolveTabStripVisible({ shown: [workspace()] })).toBe(false)
@@ -52,6 +59,10 @@ describe('no dead zone', () => {
     expect(resolveTabStripVisible({ mode: 'never', shown: [hideOnlyChrome(), hideOnlyChrome()] })).toBe(true)
   })
 
+  it('keeps the strip for an uncloseable minimizable pane', () => {
+    expect(resolveTabStripVisible({ mode: 'never', shown: [requiredReview()] })).toBe(true)
+  })
+
   it('still hides a zone that cannot strand anything', () => {
     // The workspace is uncloseable, and a stack is reachable by tab cycling —
     // the invariant protects handles, it does not veto hiding as such.
@@ -75,6 +86,13 @@ describe('a full-page view', () => {
 // screen and the toggle command can never disagree.
 describe('tabStripVisibleForZone', () => {
   const contributions: Record<string, Contribution> = {
+    changes: {
+      area: 'panes',
+      data: { minimizable: true, placement: 'main', uncloseable: true },
+      id: 'changes',
+      render: () => null,
+      title: 'changes'
+    },
     terminal: { area: 'panes', data: { placement: 'bottom' }, id: 'terminal', render: () => null, title: 'terminal' },
     'tile:a': { area: 'panes', data: { placement: 'main' }, id: 'tile:a', render: () => null, title: 'tile' },
     workspace: {
@@ -101,6 +119,7 @@ describe('tabStripVisibleForZone', () => {
     expect(visible(['workspace'])).toBe(false)
     expect(visible(['tile:a'], 'never')).toBe(true)
     expect(visible(['terminal'], 'never')).toBe(true)
+    expect(visible(['changes'], 'never')).toBe(true)
   })
 
   it('falls back to the app default when the zone has no choice', () => {
