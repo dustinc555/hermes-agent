@@ -1401,7 +1401,7 @@ function dynamicTitle(
     const path = fileEditPath(args, result)
 
     if (path) {
-      return { title: fileEditBasename(path) }
+      return { title: path }
     }
   }
 

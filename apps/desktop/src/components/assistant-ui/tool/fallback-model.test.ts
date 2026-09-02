@@ -196,7 +196,7 @@ describe('buildToolView file edit diffs', () => {
       patchDiff
     )
 
-    expect(view.title).toBe('demo.ts')
+    expect(view.title).toBe('src/demo.ts')
     expect(view.subtitle).toBe('src/demo.ts')
     expect(view.detail).toBe('')
     expect(view.inlineDiff).toBe(patchDiff)
@@ -212,7 +212,7 @@ describe('buildToolView file edit diffs', () => {
       ''
     )
 
-    expect(view.title).toBe('demo.ts')
+    expect(view.title).toBe('src/demo.ts')
     expect(view.subtitle).toBe('src/demo.ts')
     expect(view.detail).toBe('')
   })
@@ -252,6 +252,19 @@ describe('buildToolView title actions', () => {
 
     expect(view.title).toBe('Read example.com/docs')
     expect(view.titleAction).toBeUndefined()
+  })
+
+  it('shows the full path for file edits', () => {
+    const view = buildToolView(
+      part({
+        args: { path: '/home/dustin/hermes-agent/apps/desktop/src/app.tsx' },
+        result: { inline_diff: '--- a\n+++ b\n+changed' },
+        toolName: 'patch'
+      }),
+      '--- a\n+++ b\n+changed'
+    )
+
+    expect(view.title).toBe('/home/dustin/hermes-agent/apps/desktop/src/app.tsx')
   })
 
   it('uses the filename for completed read_file rows', () => {
